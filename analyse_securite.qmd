@@ -1,0 +1,1385 @@
+---
+title: "Déterminants du sentiment de sécurité nocturne en France" 
+subtitle: "Analyse multivariée des données de l'European Social Survey (ESS), Vague 9"
+author: "Chadi Gamal"
+format:
+  html:
+    code-fold: true 
+    code-tools: true # enables a central command to hide/show all code on the output html
+    embed-resources: true # so images and styles are directly embedded in the html (no need to load them from a separate folder)
+    code-overflow: wrap
+    toc: true           # enables the table of contents
+    toc-location: right # places the TOC on the right-hand side
+    number-sections: true  # automatically number sections
+editor: visual
+date: now
+date-format: "D MMMM YYYY à H[h]mm"
+abstract-title: "Résumé"
+abstract: "À partir des données de l'European Social Survey (ESS9), ce projet analyse l'impact de 15 facteurs (socio-démographiques, santé, valeurs) sur le sentiment de sécurité nocturne en France. La démarche combine explorations univariée et bivariée, puis une modélisation par régression linéaire multiple afin d'isoler l'effet propre de chaque variable « toutes choses égales par ailleurs » et de neutraliser les effets de confusion."
+execute:
+  eval: true
+  echo: true
+  warning: false
+  results: "asis"
+  message: false 
+engine: knitr
+knitr:
+  opts_chunk:
+    out.width: "100%"
+---
+
+```{css, echo=F}
+p { text-align: justify; }
+
+body{font-size: 16px}
+code, pre{font-size: 13px}
+
+figure { margin: 0 }
+
+.legend {
+  margin-top: 0em;
+  margin-bottom: 2em;
+  text-align: left;
+  font-size: 0.75rem;
+  font-family: Calibri, sans-serif;
+}
+
+a {text-decoration: none; }
+
+caption { text-align: center; font-weight: bold; }
+
+.figure-caption { text-align: center; font-weight: bold; }
+
+/* Style for R code blocks (already has grey background) */
+pre.sourceCode {
+  background-color: #f5f5f5;
+  border-left: 3px solid #4CAF50;
+  padding: 10px;
+}
+
+/* Style for R output */
+pre:not(.sourceCode) {
+  background-color: #fff8e1;  /* Light yellow background */
+  border-left: 3px solid #FF9800;  /* Orange left border */
+  padding: 10px;
+  margin-top: 5px;
+}
+
+```
+
+**Introduction et démarche méthodologique**
+
+Ce projet a pour objectif d'analyser les déterminants du sentiment de sécurité des individus lorsqu’ils marchent seuls dans leur quartier après la tombée de la nuit en France. À partir des données de l'European Social Survey (ESS9), qui contient plus de 360 questions (informations socio-démographiques, opinions, aspects sociaux, politiques et religieux) et couvre la majeure partie de la vie de la personne, j'ai choisi seulement 15 facteurs. Parmi ces 360 questions, j'ai sélectionné celles dont je pense qu'elles peuvent avoir une association avec le fait de se sentir en insécurité en marchant seul la nuit dans le quartier. Ces facteurs ont été étudiés en regroupant des caractéristiques socio-démographiques, des indicateurs de santé, des opinions politiques ainsi que le système de valeurs des répondants.
+
+La démarche d'analyse s'articule en trois étapes progressives :
+
+-   **L'analyse univariée** : pour explorer la distribution des répondants selon les différentes modalités de chaque facteur et valider la qualité des données.
+
+-   **L'analyse bivariée** : pour évaluer, à l'aide de tests de significativité statistique adaptés, l'association brute entre chaque facteur indépendant et le sentiment de sécurité nocturne.
+
+-   **L'analyse multivariée (régression linéaire multiple)** : pour isoler l'effet propre de chaque facteur « toutes choses égales par ailleurs » et neutraliser les potentiels effets de confusion.
+
+```{r, echo=T}
+#| code-summary: "Initialisation de l'environnement de travail"
+
+# Pour supprimer tout ce qui est en mémoire
+rm(list=ls())
+
+# Un package qui fait des calculs statistiques (moyennes, écarts-types, régressions, etc.)
+library(stats)
+
+# Un package qui présente des statistiques déscriptives sous forme de tableaux
+library(questionr)
+
+# Un package qui facilite la manipulation, le filtrage et le nettoyage des données
+library(dplyr)
+```
+
+```{r}
+#| results: hide
+#| code-summary: "Vérification du chemin d'accès"
+getwd()
+```
+
+```{r}
+#| code-summary: "Chargement de la base de données brute"
+df <- read.csv("ESS9e03_2.csv")
+df <- as.data.frame(df)
+```
+
+```{r}
+#| code-summary: "Extraire les données de la France"
+df_fr <- filter(df, cntry == "FR")
+df_fr <- as.data.frame(df_fr)
+```
+
+```{r}
+#| code-summary: "Nombre de répondants, effectif de l'échantillon analysé"
+nrow(df_fr)
+```
+
+L'échantillon se compose d'un effectif de 2010 personnes, ce qui constitue une base robuste en statistique pour analyser des phénomènes sociaux et humains.
+
+# Étude descriptive des variables {style="color: darkblue;"}
+
+Dans cette section, nous analysons chacune de nos variables : notre variable principale (la variable à expliquer), à savoir "Le sentiment de sécurité en marchant la nuit", et chacune des variables explicatives, pour savoir comment se compose notre échantillon.
+
+-   **Pour les variables sous forme de catégories :** Nous faisons un tableau de fréquence en pourcentage et un graphique en barres.
+
+-   **Pour les variables sous forme de chiffres :** Nous calculons la moyenne, la médiane, les quantiles et nous faisons un graphique en boîte à moustaches.
+
+## Le sentiment de sécurité en marchant seul dans son quartier après la tombée de la nuit {style="color: darkgreen;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$aesfdrk, useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$aesfdrk_clean <- df_fr$aesfdrk
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean %in% c(7, 8)] <- NA
+
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == 1] <- "Très sécurisé(e)" 
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == 2] <- "Sécurisé(e)"
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == 3] <- "Insécurisé(e)"
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == 4] <- "Très insécurisé(e)"
+
+df_fr$aesfdrk_clean <- factor(df_fr$aesfdrk_clean, 
+  levels = c("Très sécurisé(e)", "Sécurisé(e)", "Insécurisé(e)", "Très insécurisé(e)")
+)
+
+freq(df_fr$aesfdrk_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$aesfdrk_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le Sentiment de sécurité en marchant la nuit",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 11),
+        cex.names = 0.8,  # Diminue la police des barres (Oui/Non)
+        cex.main = 0.9,   # Diminue légèrement la police du grand titre
+        cex.lab = 0.8,    # Diminue la police du texte "Pourcentage (%)"
+        cex.axis = 0.8)   # Diminue la police des chiffres de l'axe Y
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Il y a une portion non négligeable de gens qui ne se sentent pas en sécurité en marchant seuls dans le quartier après la tombée de la nuit, ce qui représente presque le quart des répondants (23,2 % en cumulant "insécurisé" et "très insécurisé"). C'est une proportion très importante sur un échantillon relativement grand de deux mille personnes. Cela indique que ce sentiment n'est pas dû à des raisons personnelles, comme la personnalité ou l'histoire de l'individu, mais plutôt à des conditions sociales globales qui pèsent sur la société. Et c'est ce que nous allons découvrir par la suite.
+
+## Les facteurs explicatifs (variables indépendantes) {style="color: darkgreen;"}
+
+### Le genre du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$gndr, useNA = "always") 
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$gndr_clean <- df_fr$gndr
+df_fr$gndr_clean [df_fr$gndr_clean == 1] <- "Homme"
+df_fr$gndr_clean [df_fr$gndr_clean == 2] <- "Femme"
+
+df_fr$gndr_clean <- as.factor(df_fr$gndr_clean)
+
+freq(df_fr$gndr_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$gndr_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le genre des répondants",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 9),
+        cex.names = 0.8,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8)   
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Dans notre échantillon, la répartition entre les hommes et les femmes n'est pas totalement équilibrée, car les femmes sont plus représentées de presque 10 % (environ 9 % d'écart). Cela pourrait être une raison qui explique la part importante de personnes qui ne se sentent pas en sécurité en marchant seules dans le quartier après la tombée de la nuit, si l'on suit l'idée générale selon laquelle les femmes ressentent plus d'insécurité que les hommes. De toute façon, ce léger déséquilibre n'aura pas d'influence sur nos analyses, surtout que nous allons justement analyser le lien entre le genre et le fait de se sentir en insécurité en marchant seul dans le quartier après la tombée de la nuit.
+
+### L'Âge du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$agea, useNA = "always")
+```
+
+```{r}
+#| code-summary: "Indicateurs statistiques"
+summary(df_fr$agea)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+boxplot(df_fr$agea, 
+        main = "L'âge des répondants", 
+        las = 1, 
+        col = "lightblue", 
+        ylab = "Âge (en années)",
+        cex.main = 0.9,   # Diminue légèrement la police du grand titre
+        cex.lab = 0.8,    # Diminue la police du texte "Âge (en années)"
+        cex.axis = 0.8)   # Diminue la police des chiffres de l'axe Y (les âges)
+points(x = 1, y = mean(df_fr$agea, na.rm = TRUE), col = "red", pch = 19, cex = 1.5)
+```
+
+Dans notre échantillon, tous les âges sont représentés et, comme on le voit dans le tableau, d'une manière presque équilibrée. D'abord, nous avons des répondants de 15 ans jusqu'à 90 ans, et les écarts absents sont très petits, donc nous pouvons considérer que presque tous les âges sont présents. C'est une très bonne chose, car cela va nous aider à prendre en compte tous les citoyens matures qui marchent indépendamment dans la rue au sein de la société. Deuxième chose très importante : pour chaque âge, nous avons un effectif d'une dizaine de personnes pour la plupart, et jamais moins de 9 répondants. Cela rend l'échantillon très solide pour la généralisation de la conclusion que nous allons découvrir.
+
+### L'appartenance à un groupe discriminé {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$dscrgrp, useNA ="always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$dscrgrp_clean <- df_fr$dscrgrp
+
+df_fr$dscrgrp_clean [df_fr$dscrgrp_clean %in% c(7, 8)] <- NA
+
+df_fr$dscrgrp_clean [df_fr$dscrgrp_clean ==1] <- "Oui"
+df_fr$dscrgrp_clean [df_fr$dscrgrp_clean ==2] <- "Non"
+
+df_fr$dscrgrp_clean <- factor(df_fr$dscrgrp_clean,
+  levels = c("Oui", "Non")
+)
+
+freq(df_fr$dscrgrp_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$dscrgrp_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le fait d'être discriminé.e",
+        las = 1,
+        col = "steelblue",
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 13),
+        cex.names = 0.8,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8)   
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Plus d'une personne sur dix (13,2 %) se revendique comme membre d'un groupe victime de discrimination en France. C'est une portion tout à fait pas négligeable et même inquiétante. Un tel pourcentage montre qu'il ne s'agit pas d'un phénomène isolé ou d'un ressenti purement minoritaire, mais d'une réalité vécue par une part significative de la population. Il sera particulièrement intéressant de voir si cette vulnérabilité sociale liée à la discrimination renforce aussi le sentiment d'insécurité la nuit.
+
+### Le niveau de bonheur des répondants {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$happy, useNA = "always")
+```
+
+```{r}
+#| code-summary: Indicateurs statistiques
+df_fr$happy_clean <- df_fr$happy
+
+df_fr$happy_clean [df_fr$happy_clean %in% c(77, 88)] <- NA
+
+summary(df_fr$happy_clean)
+
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$happy_clean))*100
+bp <- barplot(pourcentages, 
+              main = "Le niveau de bonheur des répondant.e.s", 
+              las = 1, 
+              col = "lightblue", 
+              xlab = "Niveau de bonheur (0 à 10)", 
+              ylab = "Pourcentage (%)",
+              ylim = c(0, max(pourcentages) + 5),
+              cex.main = 0.9,   
+              cex.lab = 0.8,    
+              cex.axis = 0.8)
+
+# 3. Ajouter les pourcentages au-dessus de chaque barre
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2, cex = 0.7)
+```
+
+Le degré de bonheur est, pour la majorité, situé entre modérément bien et très bien. Cependant, il y a des individus avec un score inférieur à 5, allant même jusqu'à zéro. Presque un quart de l'échantillon se trouve dans une position intermédiaire en ayant choisi les notes 4, 5 ou 6 ; on peut dire que ces personnes ne sont pas pleinement heureuses pour autant. Ainsi, le fait de ne pas être malheureux ou triste (scores 0, 1 ou 2, où l'effectif est presque nul) ne signifie pas automatiquement que l'individu est heureux. Il sera très important de voir le comportement de cette tranche intermédiaire envers le sentiment d'insécurité en marchant seul la nuit dans le quartier.
+
+### Le fait d'être né en France {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$brncntr, useNA ="always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$brncntr_clean <- df_fr$brncntr
+
+df_fr$brncntr_clean [df_fr$brncntr_clean == 8] <- NA
+
+df_fr$brncntr_clean [df_fr$brncntr_clean ==1] <- "Oui"
+df_fr$brncntr_clean [df_fr$brncntr_clean ==2] <- "Non"
+
+df_fr$brncntr_clean <- factor(
+  df_fr$brncntr_clean,
+  levels = c(
+    "Oui", "Non")
+)
+
+freq(df_fr$brncntr_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$brncntr_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le fait d'être né en France",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 11), 
+        cex.names = 0.8,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8)   
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Presque une personne sur dix (12 %) n'est pas née en France, ce qui est une part pas négligeable. Cela indique que la France est un pays plutôt cosmopolite. C'est un facteur important à étudier pour savoir si les gens, au sein d'un pays cosmopolite, se sentent en sécurité ou non en marchant seuls dans le quartier la nuit, et si cela est fonction du fait d'être né en France ou si cela n'a rien à voir.
+
+### Le niveau d'études des répondants {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$eisced, useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$eisced_clean <- df_fr$eisced
+df_fr$eisced_clean [df_fr$eisced_clean %in% c(77, 88)] <- NA
+
+df_fr$eisced_clean[df_fr$eisced_clean == 1] <- "Inférieur au premier cycle"
+df_fr$eisced_clean[df_fr$eisced_clean == 2] <- "Premier cycle secondaire"
+df_fr$eisced_clean[df_fr$eisced_clean == 3] <- "Secondaire général (Bac)"
+df_fr$eisced_clean[df_fr$eisced_clean == 4] <- "Secondaire pro / technique"
+df_fr$eisced_clean[df_fr$eisced_clean == 5] <- "Post-secondaire non sup."
+df_fr$eisced_clean[df_fr$eisced_clean == 6] <- "Supérieur (Bac+3)"
+df_fr$eisced_clean[df_fr$eisced_clean == 7] <- "Supérieur (Bac+5 et plus)"
+
+df_fr$eisced_clean <- factor(df_fr$eisced_clean, 
+  levels = c("Inférieur au premier cycle", "Premier cycle secondaire", "Secondaire général (Bac)", "Secondaire pro / technique", "Post-secondaire non sup.", "Supérieur (Bac+3)", "Supérieur (Bac+5 et plus)")
+)
+
+freq(df_fr$eisced_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$eisced_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le plus haut niveau d'études",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 9), 
+        cex.names = 0.6,
+        cex.main = 0.9,  
+        cex.lab = 0.8,  
+        cex.axis = 0.8,
+        names.arg = c("Inférieur au \npremier cycle", 
+                      "Premier cycle \nsecondaire", 
+                      "Secondaire \ngénéral \n(Bac)", 
+                      "Secondaire pro / \ntechnique", 
+                      "Post-\nsecondaire \nnon sup.", 
+                      "Supérieur \n(Bac+3)",
+                      "Supérieur \n(Bac+5 et plus)"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+La répartition du niveau d'études dans l'échantillon est hétérogène : il y a de tous les niveaux et chaque catégorie contient une bonne portion. Selon cette répartition, on constate que la majorité des individus ont un niveau qui va jusqu'au secondaire et pas après, ce qui représente presque les deux tiers de l'échantillon. Le troisième tiers est allé à l'université, dont presque 21 % de l'échantillon qui a fait des hautes études (Bac+3, Master et Doctorat). Donc, la majorité des citoyens en France s'arrêtent au secondaire, et une minorité non négligeable (environ un tiers) entre à la fac.
+
+### La victimisation par cambriolage ou agression ces 5 dernières années {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$crmvct, useNA ="always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$crmvct_clean <- df_fr$crmvct
+
+df_fr$crmvct_clean [df_fr$crmvct_clean ==1] <- "Oui"
+df_fr$crmvct_clean [df_fr$crmvct_clean ==2] <- "Non"
+
+df_fr$crmvct_clean <- factor(
+  df_fr$crmvct_clean,
+  levels = c(
+    "Oui", "Non")
+)
+
+freq(df_fr$crmvct_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$crmvct_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Victimisation par cambriolage ou agression ces 5 dernières années",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 9), 
+        cex.names = 0.8,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,   
+        cex.axis = 0.8)   
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Une personne sur cinq (20,4 %) a été victime, ou un membre de son foyer, d'un cambriolage ou d'une agression au cours des 5 dernières années. C'est une portion énorme et inquiétante qui indique qu'il y a un certain manque de sécurité en France. Mais ce qui est intéressant, c'est que malgré cela, tout le monde ne se sent pas en insécurité. On constate que la proportion est proche (23,2 % en cumulant "insécurisé" et "très insécurisé" comme on l'a mentionné). Alors, est-ce que ce sont typiquement les mêmes personnes qui ont été victimes et qui ont peur la nuit ? Et est-ce que c'est le seul facteur, la seule raison ou cause qui soit associée ou qui puisse produire le sentiment d'insécurité en marchant seul dans le quartier la nuit ? C'est ce que nous allons voir.
+
+### État de santé général subjectif {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$health, useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$health_clean <- df_fr$health
+df_fr$health_clean [df_fr$health_clean == 7] <- NA
+
+df_fr$health_clean [df_fr$health_clean == 1] <- "Très bon" 
+df_fr$health_clean [df_fr$health_clean == 2] <- "Bon"
+df_fr$health_clean [df_fr$health_clean == 3] <- "Moyen"
+df_fr$health_clean [df_fr$health_clean == 4] <- "Mauvais"
+df_fr$health_clean [df_fr$health_clean == 5] <- "Très mauvais"
+
+df_fr$health_clean <- factor(df_fr$health_clean, 
+  levels = c("Très bon", "Bon", "Moyen", "Mauvais", "Très mauvais")
+)
+
+freq(df_fr$health_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$health_clean))*100
+bp <- barplot(pourcentages, 
+        main = "L'état de santé général subjectif",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 9), 
+        cex.names = 0.8,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8)   
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Un peu plus de 40 % de l'échantillon se situe entre "moyen", "mauvais" et "très mauvais". C'est un indicateur négatif qui montre que la santé en général de deux personnes sur cinq n'est pas optimale, dont 7,8 % pour la catégorie "mauvais", ce qui n'est pas négligeable et reste inquiétant. Il faut souligner qu'il s'agit d'une perception subjective, car la question posée est : "Comment est votre état de santé en général ? Diriez-vous qu’il est…". La perception que l'individu a de lui-même est très importante, et elle pourrait être étroitement associée à d'autres sentiments ou perceptions, comme celui de la sécurité.
+
+### Le lieu de résidence des répondants {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$domicil , useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$domicil_clean <- df_fr$domicil
+df_fr$domicil_clean [df_fr$domicil_clean == 8] <- NA
+
+df_fr$domicil_clean [df_fr$domicil_clean == 1] <- "Une grande ville" 
+df_fr$domicil_clean [df_fr$domicil_clean == 2] <- "La banlieue ou la périphérie d'une grande ville"
+df_fr$domicil_clean [df_fr$domicil_clean == 3] <- "Une ville moyenne ou petite"
+df_fr$domicil_clean [df_fr$domicil_clean == 4] <- "Un village ou une commune rurale"
+df_fr$domicil_clean [df_fr$domicil_clean == 5] <- "Une maison isolée à la campagne ou une ferme"
+
+df_fr$domicil_clean <- factor(df_fr$domicil_clean, 
+  levels = c("Une grande ville", "La banlieue ou la périphérie d'une grande ville", "Une ville moyenne ou petite", "Un village ou une commune rurale", "Une maison isolée à la campagne ou une ferme")
+)
+
+freq(df_fr$domicil_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$domicil_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Le lieu de résidence des répondants",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 9), 
+        cex.names = 0.7,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8,   
+        names.arg = c("Une grande ville", 
+                      "La banlieue \nou la périphérie \nd'une grande ville", 
+                      "Une ville moyenne \nou petite", 
+                      "Un village \nou une commune \nrurale",
+                      "Une maison isolée \nà la campagne \nou une ferme"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Tous les milieux de résidence sont représentés dans une portion importante, même pour les catégories les plus minoritaires comme "Une maison isolée à la campagne ou une ferme". Cela indique que la géographie de l'habitat est variée et diversifiée dans le pays. On constate qu'il y a pas mal de gens qui habitent dans des lieux moins denses ou urbanisés qu'une grande ville. Il y a donc différents contextes géographiques au sein de notre échantillon et, bien sûr, la nuit dans le quartier de chacun diffère selon l'adaptation des infrastructures et aussi selon les profils des habitants.
+
+### La région de résidence des répondants {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$region, useNA = "always")
+```
+
+```{r}
+#| code-summary: "Conversion en facteur"
+df_fr$region <- as.factor(df_fr$region)
+```
+
+Toutes les zones géographiques de la France métropolitaine sont représentées (Nord, Sud, Est, Ouest et Centre). L'ambiance nocturne y est différente et chaque région a sa propre spécificité. En effet, les régions diffèrent non seulement par leur géographie, leurs infrastructures et le profil de leurs habitants, mais aussi politiquement. L'orientation politique des maires et du pouvoir dirigeant locale influe sur leurs décisions en matière de gestion publique, ce qui a un impact direct sur la sécurité et le sentiment d'insécurité des citoyens la nuit.
+
+### Importance de la richesse et du matériel {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$imprich  , useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$imprich_clean <- df_fr$imprich 
+df_fr$imprich_clean [df_fr$imprich_clean %in% c(7, 8)] <- NA
+
+df_fr$imprich_clean [df_fr$imprich_clean == 1] <- "Me ressemble beaucoup" 
+df_fr$imprich_clean [df_fr$imprich_clean == 2] <- "Me ressemble"
+df_fr$imprich_clean [df_fr$imprich_clean == 3] <- "Me ressemble un peu"
+df_fr$imprich_clean [df_fr$imprich_clean == 4] <- "Me ressemble tout juste un peu"
+df_fr$imprich_clean [df_fr$imprich_clean == 5] <- "Ne me ressemble pas"
+df_fr$imprich_clean [df_fr$imprich_clean == 6] <- "Ne me ressemble pas du tout"
+
+df_fr$imprich_clean <- factor(df_fr$imprich_clean, 
+  levels = c("Me ressemble beaucoup", "Me ressemble", "Me ressemble un peu", "Me ressemble tout juste un peu", "Ne me ressemble pas", "Ne me ressemble pas du tout")
+)
+
+freq(df_fr$imprich_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$imprich_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Importance de la richesse et du matériel",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 11), 
+        cex.names = 0.7,  # Diminue la police des barres (Oui/Non)
+        cex.main = 0.9,   # Diminue légèrement la police du grand titre
+        cex.lab = 0.8,    # Diminue la police du texte "Pourcentage (%)"
+        cex.axis = 0.8,   # Diminue la police des chiffres de l'axe Y
+        names.arg = c("Me ressemble\nbeaucoup", 
+                      "Me\nressemble", 
+                      "Me ressemble\nun peu", 
+                      "Me ressemble\ntout juste \nun peu", 
+                      "Ne me\nressemble pas", 
+                      "Ne me \nressemble pas \ndu tout"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+On constate que la grande majorité répond "Ne me ressemble pas" ou "Ne me ressemble pas du tout" à l'affirmation selon laquelle il est important d'être riche, d'avoir beaucoup d'argent et des objets de valeur coûteux. Ces personnes représentent plus des trois quarts de l'échantillon (77 %). À l'inverse, ceux qui s'y reconnaissent (beaucoup ou un peu) restent minoritaires. On peut en conclure que la plupart des individus ne comptent pas principalement sur l'argent et les biens matériels pour construire leur vie et leur bien-être. Cela indique d'une part qu'ils n'ont pas une culture ou une mentalité purement consumériste ou matérialiste, et d'autre part, que leurs besoins principaux sont probablement garantis par le système de sécurité sociale et de protection collective.
+
+### Importance de la sécurité de l'environnement {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$impsafe  , useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$impsafe_clean <- df_fr$impsafe 
+df_fr$impsafe_clean [df_fr$impsafe_clean %in% c(7, 8)] <- NA
+
+df_fr$impsafe_clean [df_fr$impsafe_clean == 1] <- "Me ressemble beaucoup" 
+df_fr$impsafe_clean [df_fr$impsafe_clean == 2] <- "Me ressemble"
+df_fr$impsafe_clean [df_fr$impsafe_clean == 3] <- "Me ressemble un peu"
+df_fr$impsafe_clean [df_fr$impsafe_clean == 4] <- "Me ressemble tout juste un peu"
+df_fr$impsafe_clean [df_fr$impsafe_clean == 5] <- "Ne me ressemble pas"
+df_fr$impsafe_clean [df_fr$impsafe_clean == 6] <- "Ne me ressemble pas du tout"
+
+df_fr$impsafe_clean <- factor(df_fr$impsafe_clean, 
+  levels = c("Me ressemble beaucoup", "Me ressemble", "Me ressemble un peu", "Me ressemble tout juste un peu", "Ne me ressemble pas", "Ne me ressemble pas du tout")
+)
+
+freq(df_fr$impsafe_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$impsafe_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Importance de la sécurité de l'environnement",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 11), 
+        cex.names = 0.7,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8,   
+        names.arg = c("Me ressemble\nbeaucoup", 
+                      "Me\nressemble", 
+                      "Me ressemble\nun peu", 
+                      "Me ressemble\ntout juste \nun peu", 
+                      "Ne me\nressemble pas", 
+                      "Ne me \nressemble pas \ndu tout"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+Contrairement à ce que l'on aurait pu estimer (où l'on s'attendrait à ce que tout le monde se reconnaisse dans l'affirmation : "Il est important pour elle/lui de vivre dans un environnement sûr et sécurisé. Elle/Il évite tout ce qui pourrait mettre en danger sa sécurité"), on constate qu'une part non négligeable de la population s'en détache. En effet, près de 30 % des répondants choisissent les modalités "Me ressemble tout juste un peu", "Ne me ressemble pas" ou "Ne me ressemble pas du tout". Ce résultat est étonnant. On peut l'interpréter de plusieurs manières : soit ces personnes n'ont jamais expérimenté le danger et se sentent totalement à l'abri, soit elles sont naturellement courageuses et peu anxieuses, soit elles font preuve d'une certaine indifférence ou de fatalisme en se disant "advienne que pourra".
+
+### Importance de la loyauté envers les proches {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$iplylfr, useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$iplylfr_clean <- df_fr$iplylfr 
+df_fr$iplylfr_clean [df_fr$iplylfr_clean %in% c(7, 8)] <- NA
+
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 1] <- "Me ressemble beaucoup" 
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 2] <- "Me ressemble"
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 3] <- "Me ressemble un peu"
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 4] <- "Me ressemble tout juste un peu"
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 5] <- "Ne me ressemble pas"
+df_fr$iplylfr_clean [df_fr$iplylfr_clean == 6] <- "Ne me ressemble pas du tout"
+
+df_fr$iplylfr_clean <- factor(df_fr$iplylfr_clean, 
+  levels = c("Me ressemble beaucoup", "Me ressemble", "Me ressemble un peu", "Me ressemble tout juste un peu", "Ne me ressemble pas", "Ne me ressemble pas du tout")
+)
+
+freq(df_fr$iplylfr_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$iplylfr_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Importance de la loyauté envers les proches",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 10),
+        cex.names = 0.7,
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8,   
+        names.arg = c("Me ressemble\nbeaucoup", 
+                      "Me\nressemble", 
+                      "Me ressemble\nun peu", 
+                      "Me ressemble\ntout juste \nun peu", 
+                      "Ne me\nressemble pas", 
+                      "Ne me \nressemble pas \ndu tout"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+On constate que quatre cinquièmes de l'échantillon (80,4 %) se reconnaissent dans l'affirmation : "Il est important pour elle/lui d’être fidèle à ses amis. Elle/Il souhaite se consacrer aux personnes qui lui sont proches", la plus grande part ayant choisi la modalité "Me ressemble beaucoup" (44,8 %). Les proportions diminuent ensuite fortement à mesure que l'on va vers les avis négatifs. Bien que presque tout le monde soit d'accord, il existe une très faible portion marginale qui choisit "Me ressemble tout juste un peu", "Ne me ressemble pas" ou "Ne me ressemble pas du tout".
+
+\n
+
+Ce désaccord complet concerne un pourcentage si petit qu'il relève probablement d'expériences purement personnelles ou de traits de personnalité particuliers, plutôt que d'un facteur social dominant. On peut en conclure que les individus maintiennent généralement de bons réseaux de sociabilité ou cherchent à les préserver, ce qui fait écho aux théories de l'École de Chicago sur l'importance des réseaux personnels et du voisinage pour faire face aux transformations du milieu de vie.
+
+### Importance de pouvoir prendre ses propres décisions et d'être libre {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$impfree  , useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$impfree_clean <- df_fr$impfree 
+df_fr$impfree_clean [df_fr$impfree_clean %in% c(7, 8)] <- NA
+
+df_fr$impfree_clean [df_fr$impfree_clean == 1] <- "Me ressemble beaucoup" 
+df_fr$impfree_clean [df_fr$impfree_clean == 2] <- "Me ressemble"
+df_fr$impfree_clean [df_fr$impfree_clean == 3] <- "Me ressemble un peu"
+df_fr$impfree_clean [df_fr$impfree_clean == 4] <- "Me ressemble tout juste un peu"
+df_fr$impfree_clean [df_fr$impfree_clean == 5] <- "Ne me ressemble pas"
+df_fr$impfree_clean [df_fr$impfree_clean == 6] <- "Ne me ressemble pas du tout"
+
+df_fr$impfree_clean <- factor(df_fr$impfree_clean, 
+  levels = c("Me ressemble beaucoup", "Me ressemble", "Me ressemble un peu", "Me ressemble tout juste un peu", "Ne me ressemble pas", "Ne me ressemble pas du tout")
+)
+
+freq(df_fr$impfree_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$impfree_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Importance de pouvoir prendre ses propres décisions et d'être libre",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 10),
+        cex.names = 0.7,  
+        cex.main = 0.9,   
+        cex.lab = 0.8,    
+        cex.axis = 0.8,   
+        names.arg = c("Me ressemble\nbeaucoup", 
+                      "Me\nressemble", 
+                      "Me ressemble\nun peu", 
+                      "Me ressemble\ntout juste \nun peu", 
+                      "Ne me\nressemble pas", 
+                      "Ne me \nressemble pas \ndu tout"))
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+On constate qu'une majorité se positionne en faveur de l'affirmation : "Il est important pour elle/lui de prendre ses propres décisions concernant ce qu’elle/il fait. Elle/Il aime être libre et ne pas dépendre des autres." En effet, les catégories "Me ressemble beaucoup" (31,7 %) et "Me ressemble" (28,9 %) regroupent à elles deux 60,6 % de l'échantillon. Les proportions diminuent ensuite progressivement à mesure que l'on va vers les avis négatifs.
+
+\n
+
+Malgré cette tendance à l'autonomie, il existe une part non négligeable d'individus qui expriment une forme de dépendance ou un détachement face à cette liberté (environ 23,5 % si l'on cumule les réponses faibles ou négatives). Cela peut s'expliquer par des facteurs structurels comme l'âge, la condition physique, la situation sociale, ou encore une socialisation qui a éduqué à la dépendance. Ces personnes peuvent ressentir le besoin de s'appuyer sur les autres, ou bien, comme l'a théorisé Erich Fromm, manifester une forme de "peur de la liberté" face aux responsabilités et à l'isolement qu'elle implique.
+
+### Être limité dans ses activités quotidiennes par une maladie ou un handicap {style="color: blue;"}
+
+```{r}
+#| code-summary: Tri à plat initial
+table(df_fr$hlthhmp  , useNA = "always")
+```
+
+```{r}
+#| code-summary: Nettoyage, recodage et tri à plat
+df_fr$hlthhmp_clean <- df_fr$hlthhmp 
+df_fr$hlthhmp_clean [df_fr$hlthhmp_clean %in% c(7, 8)] <- NA
+
+df_fr$hlthhmp_clean [df_fr$hlthhmp_clean == 1] <- "Oui beaucoup" 
+df_fr$hlthhmp_clean [df_fr$hlthhmp_clean == 2] <- "Oui, dans une certaine mesure"
+df_fr$hlthhmp_clean [df_fr$hlthhmp_clean == 3] <- "Non"
+
+df_fr$hlthhmp_clean <- factor(df_fr$hlthhmp_clean, 
+  levels = c("Oui beaucoup", "Oui, dans une certaine mesure", "Non")
+)
+
+freq(df_fr$hlthhmp_clean)
+```
+
+```{r}
+#| code-summary: Représentation graphique
+pourcentages <- prop.table(table(df_fr$hlthhmp_clean))*100
+bp <- barplot(pourcentages, 
+        main = "Limitation dans les activités quotidiennes par une maladie ou un handicap",
+        las = 1, 
+        col = "steelblue", 
+        ylab = "Pourcentage (%)",
+        ylim = c(0, max(pourcentages) + 11),
+        cex.names = 0.8,
+        cex.main = 0.9, 
+        cex.lab = 0.8,  
+        cex.axis = 0.8) 
+text(x = bp, y = pourcentages, label = paste0(round(pourcentages, 1), "%"), pos = 3, col = "darkblue", font = 2)
+```
+
+On constate que près de 30 % de l'échantillon (28,4 %) se déclarent limités ("Oui, beaucoup" ou "Oui, dans une certaine mesure") dans leurs activités quotidiennes à cause d’une maladie de longue durée, d’un handicap, d’une infirmité ou d’un problème de santé mentale. C'est une proportion importante et inquiétante, qui va de pair avec le constat fait précédemment sur l'état de santé général et qui peut aider à interpréter le niveau de bonheur des répondants.
+
+\n
+
+Ces personnes ont un besoin accru de sécurité et d'un milieu de vie adapté. Il faut souligner que ce pourcentage ne reflète pas seulement la maladie en elle-même, mais met en lumière l'inadaptation de la société (au niveau des infrastructures ou des choix politiques). C'est cette défaillance environnementale qui transforme un problème de santé en un handicap limitant les activités quotidiennes.
+
+# Étude des liens entre chaque variable et le sentiment de sécurité nocturne {style="color: darkblue;"}
+
+Dans cette section, nous réalisons des analyses bivariées en croisant chacune de nos variables indépendantes (les variables explicatives) avec notre variable dépendante (la variable à expliquer), à savoir "Le sentiment de sécurité en marchant la nuit".
+
+-   Pour les variables indépendantes catégorielles (nominales ou ordinales) : Nous construisons d'abord un **tableau croisé** (en pourcentages en lignes) afin d'observer la distribution du sentiment de sécurité selon les différentes modalités de la variable explicative. Ensuite, nous réalisons un **test du Chi-deux** pour évaluer la significativité statistique de cette association. Enfin, nous calculons le **V de Cramer** pour mesurer l'intensité (la force) de la relation mise en évidence.
+
+-   Pour les variables indépendantes continues (numériques) : Nous procédons à une **comparaison de moyennes** pour observer comment les scores moyens de la variable continue varient d'une catégorie de sentiment de sécurité à l'autre. Pour vérifier si ces écarts sont statistiquement significatifs, nous appliquons un **test d'ANOVA** (Analyse de la variance).
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon le genre du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_genre <- prop.table(table(df_fr$gndr_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_genre, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$gndr, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$gndr, df_fr$aesfdrk_clean))
+```
+
+On constate que le sentiment de sécurité en marchant seul la nuit dans son quartier diffère énormément selon le genre. En effet, la proportion de personnes se sentant « insécurisées » ou « très insécurisées » est trois fois plus élevée chez les femmes que chez les hommes : alors que ce sentiment d'insécurité ne touche qu'environ 11 % des hommes, il grimpe à près de 33,6 % chez les femmes. Cet écart est particulièrement remarquable et préoccupant, et ce indépendamment du fait que les femmes soient plus représentées dans l'échantillon. D'après la p-value du test du Chi², l'association entre le genre et le sentiment de sécurité est statistiquement hautement significative, ce qui prouve que ce résultat n'est pas dû au hasard et qu'il peut être généralisé à la population parente. Enfin, la valeur du V de Cramer indique que l'intensité de cette relation correspond à une association modérée. Ce constat démontre que les femmes restent relativement plus vulnérables et affrontent des risques perçus bien plus élevés que les hommes dans l'espace public. D'un point de vue sociologique, cela révèle que les quartiers et les aménagements urbains sont historiquement plus adaptés aux trajectoires masculines qu'à une occupation équitable par l'ensemble des citoyens. Cette organisation de la ville nocturne reflète ainsi une forme de discrimination systémique et de genre, où l'accès à la liberté de circulation et le droit à la ville ne sont pas garantis de la même manière pour les hommes et pour les femmes
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'âge du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Comparaison des moyennes d'âge
+tapply(df_fr$agea, df_fr$aesfdrk_clean, mean, na.rm = TRUE)
+```
+
+```{r}
+#| code-summary: Test de significativité (ANOVA)
+anova_model_age <- aov(agea ~ aesfdrk_clean, data = df_fr)
+summary(anova_model_age)
+```
+
+On constate qu'il y a globalement très peu de différences d'âge moyen entre les personnes qui se sentent « très sécurisées », « sécurisées » ou « insécurisées », la moyenne tournant pour ces trois groupes autour de 50 à 52 ans. L'exception notable concerne les individus se sentant « très insécurisés », dont la moyenne d'âge est nettement plus élevée, atteignant presque 60 ans. Cela montre que les personnes les plus âgées manifestent une vulnérabilité spécifique face à l'espace public nocturne. En sociologie, ce résultat s'explique souvent par un sentiment accru de fragilité physique, une plus grande aversion au risque face à d'éventuelles agressions, ou encore par l'accumulation d'expériences passées négatives au cours de leur vie. D'après la p-value du test d'ANOVA, la relation entre l'âge et le sentiment de sécurité est statistiquement hautement significative, ce qui prouve que ce résultat n'est pas dû au hasard et qu'il peut être généralisé à la population parente.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'appartenance à un groupe discriminé {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_discr <- prop.table(table(df_fr$dscrgrp_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_discr, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$dscrgrp_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$dscrgrp_clean, df_fr$aesfdrk_clean))
+```
+
+On constate que parmi les personnes qui déclarent appartenir à un groupe discriminé en France, la proportion de celles qui se sentent « insécurisées » ou « très insécurisées » est plus élevée que chez les personnes non discriminées. Le fait de ressentir une discrimination est donc associé à un sentiment d'insécurité accru lors des déplacements nocturnes dans le quartier. Comme le souligne la prudence méthodologique, ce croisement n'indique pas une causalité directe et unidirectionnelle : il peut s'agir d'un effet cumulatif où l'expérience de la discrimination fragilise la confiance générale dans l'espace public, tout comme un fort sentiment d'insécurité peut accentuer la perception d'être mis à l'écart ou ciblé. Le test du Chi² montre que cette association est statistiquement très significative, ce qui confirme que la relation n'est pas due au hasard et est généralisable. Enfin, la valeur faible du V de Cramer indique que si ce lien existe bel et bien, l'appartenance à un groupe discriminé n'est pas le facteur principal ou unique pour expliquer le sentiment de sécurité, ouvrant la voie à l'influence d'autres variables structurelles.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon le niveau de bonheur du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Comparaison des niveaux moyens de bonheur
+tapply(df_fr$happy_clean, df_fr$aesfdrk_clean, mean, na.rm = TRUE)
+```
+
+```{r}
+#| code-summary: Test de significativité (ANOVA)
+anova_model_happy <- aov(happy_clean ~ aesfdrk_clean, data = df_fr)
+summary(anova_model_happy)
+```
+
+On constate que le score moyen de bonheur diminue graduellement à mesure que le sentiment de sécurité en marchant seul la nuit dans son quartier s'affaiblit. Bien que les écarts bruts entre les moyennes ne soient pas spectaculaires — ce qui rappelle, comme observé en analyse univariée, que le niveau de bonheur reste globalement modéré pour l'ensemble de l'échantillon —, la tendance linéaire reste nette : plus le sentiment de sécurité est faible, plus le niveau de bonheur moyen diminue (passant de 7,61 pour les personnes « très sécurisées » à 6,19 pour les « très insécurisées »). Cette association n'indique pas une causalité directe, mais suggère plutôt l'existence de facteurs sous-jacents latents capables d'altérer simultanément le sentiment de sécurité dans l'espace public et le bonheur subjectif. Le test d'ANOVA confirme que cette relation est hautement significative statistiquement, ce qui démontre que cette convergence ne doit rien au hasard et s'avère généralisable à la population parente.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon le fait d'être né en France {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_bornin <- prop.table(table(df_fr$brncntr_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_bornin, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$brncntr_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$brncntr_clean, df_fr$aesfdrk_clean))
+```
+
+On constate que la seule différence remarquable est dans la catégorie des personnes qui se sentent très insécurisées en marchant seules dans leur quartier la nuit, cette portion chez les natifs nés en France étant supérieure d'une fois et demie à celle observée chez les personnes nées à l'étranger. Sur le plan interprétatif, cela pourrait potentiellement traduire une peur liée à l'immigration au sein du quartier. Néanmoins, cette association n'est pas statistiquement significative car la p-value du test du Chi² s'élève à 0,527 : ce résultat ne peut donc pas être généralisé et pourrait entièrement être dû au hasard de l'échantillonnage.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon le niveau d'études du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_edu <- prop.table(table(df_fr$eisced_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_edu, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$eisced_clean , df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$eisced_clean , df_fr$aesfdrk_clean))
+```
+
+Au premier coup d'œil, on pourrait penser que le niveau d'études n'a pas de lien évident avec le sentiment de sécurité nocturne dans son quartier. Cependant, on observe une énorme différence dans la catégorie des personnes se sentant « très insécurisées » : cette proportion est nettement plus haute chez les répondants ayant un niveau d'études inférieur au premier cycle secondaire (ES-ISCED I), inférieur ou égal au premier cycle secondaire (ES-ISCED II), ou titulaire d'un diplôme du secondaire professionnel/technique (ES-ISCED IIIb). D'après la p-value du test du Chi², l'association est statistiquement hautement significative et n'est pas due au hasard. Pour l'interpréter, cela pourrait d'une part s'expliquer par un effet d'âge, ces catégories pouvant comprendre de jeunes adolescents de 15 ans ou plus ; pour vérifier cette hypothèse, je vais procéder à une comparaison des moyennes d'âge pour chacun de ces groupes. D'autre part, cela pourrait traduire un facteur socio-économique : les personnes ayant ces niveaux de diplômes occupent souvent des postes moins rémunérés et résident ainsi dans des quartiers plus défavorisés, là où l'insécurité objective et perçue est plus forte. En tout état de cause, la valeur du V de Cramer indique que l'intensité de cette association reste faible, ce qui montre que le niveau d'études n'est pas le seul ni le principal facteur explicatif et que d'autres variables entrent en compte.
+
+### L'âge du répondant selon le niveau d'études {style="color: lightgreen;"}
+
+```{r}
+#| code-summary: Comparaison des moyennes d'âge
+tapply(df_fr$agea, df_fr$eisced_clean, mean, na.rm = TRUE)
+```
+
+```{r}
+#| code-summary: Test de significativité (ANOVA)
+anova_model_age <- aov(agea ~ eisced_clean, data = df_fr)
+summary(anova_model_age)
+```
+
+Contre toute attente, l'hypothèse d'un effet de jeunesse est fermement infirmée par les données : les répondants ayant le niveau d'études le plus faible (« Inférieur au premier cycle ») sont en réalité les plus âgés de l'échantillon, avec une moyenne d'âge remarquable de 68,6 ans. De même, les personnes ayant un niveau de « Premier cycle secondaire » et « Secondaire général (Bac) » sont également plus âgées. D'après la p-value du test d'ANOVA, cette association entre l'âge et le niveau d'études est statistiquement hautement significative. Il faut donc écarter la première interprétation liée à l'adolescence. Ce résultat suggère plutôt l'hypothèse socio-économique : le fort sentiment d'insécurité observé chez les moins diplômés s'explique plus probablement par les conditions matérielles d'existence et le lieu de résidence, les classes populaires et ceux qui ont fait moins d'études habitant plus souvent dans des zones moins favorisées, moins sécurisées ou moins adaptées.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon la victimisation par cambriolage ou agression {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_vict <- prop.table(table(df_fr$crmvct_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_vict, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$crmvct_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$crmvct_clean, df_fr$aesfdrk_clean))
+```
+
+On constate que parmi les personnes ayant répondu « Oui » à la question demandant si le répondant ou un membre de son foyer a été victime d'un cambriolage ou d'une agression au cours des cinq dernières années, 20,64 % se sentent « insécurisées », contre 13,99 % chez celles qui ont répondu « Non ». De même, on observe une différence allant dans le même sens pour la catégorie des « très insécurisés », dont la proportion est plus élevée chez les victimes (8,85 % contre 7,51 %). Cette association est statistiquement très significative d'après la p-value du test du Chi², ce qui était pleinement anticipé. Néanmoins, il est surprenant de constater que l'écart n'est pas énorme et que le V de Cramer indique une intensité d'association très faible. Cela suggère qu'une agression ou un cambriolage, qui constitue un événement passager ponctuel et le plus souvent isolé, n'exerce pas une influence démesurée sur le sentiment d'insécurité à long terme. Ce sont plutôt les facteurs permanents et les conditions de vie fixes — qu'il s'agisse de la qualité des infrastructures, des comportements humains environnants ou des politiques publiques de sécurité — qui semblent structurer durablement cette perception.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'état de santé général subjectif du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_health <- prop.table(table(df_fr$health_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_health, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$health_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$health_clean, df_fr$aesfdrk_clean))
+```
+
+On constate une relation linéaire inverse très claire entre l'état de santé général subjectif et le sentiment de sécurité nocturne : plus la santé déclarée se détériore, plus le sentiment de sécurité s'affaiblit. En effet, parmi les personnes qualifiant leur santé de « très mauvaise », la proportion de répondants se sentant « très insécurisés » s'élève à 17,24 %, contre seulement 2,71 % chez ceux qui affichent une « très bonne » santé. Les catégories intermédiaires confirment cette dégradation progressive. D'après la p-value du test du Chi², cette association est statistiquement hautement significative et ne doit rien au hasard.
+
+\n
+
+Pour expliquer ce phénomène, plusieurs interprétations complémentaires peuvent être avancées. Premièrement, une explication d'ordre physique : les personnes en mauvaise santé ou souffrant de limitations motrices peuvent se sentir plus vulnérables face à une potentielle agression dans l'espace public en raison d'une capacité de fuite ou de défense réduite. Deuxièmement, une explication psychologique : une mauvaise santé physique peut altérer le bien-être mental, générant une anxiété générale qui se projette sur l'environnement extérieur. Enfin, troisièmement, cela peut révéler l'existence de variables cachées sous-jacentes qui font évoluer ces deux dimensions ensemble, à l'instar de l'âge (le vieillissement dégrade la santé et accroît la peur du noir) ou du niveau de vie socio-économique qui dépend du niveau d'études. On peut également supposer qu'une part importante des personnes en mauvaise santé sont des femmes ; le genre affecterait ainsi le sentiment de sécurité à travers la santé, ce qui s'apparenterait à un effet de médiation. Pour vérifier cette hypothèse, un tableau de contingence croisant le genre et l'état de santé subjectif sera réalisé. \n Néanmoins, l'intensité de cette relation reste faible d'après le V de Cramer, ce qui rappelle que la mauvaise santé n'entraîne pas mécaniquement l'insécurité et que de nombreux répondants malades continuent de se sentir sécurisés et même très sécurisés en marchant seul la nuit dans leur quartier.
+
+### L'état de santé du répondant selon son genre {style="color: lightgreen;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_health_gndr <- prop.table(table(df_fr$gndr_clean, df_fr$health_clean), 1) * 100
+round(tab_health_gndr, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$gndr_clean, df_fr$health_clean))
+
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$gndr_clean, df_fr$health_clean))
+```
+
+L'analyse du tableau croisé permet d'apporter un éclairage sur notre hypothèse de médiation. Lors des analyses précédentes, nous avons constaté que la proportion de femmes se sentant en insécurité en marchant seules la nuit dans leur quartier était plus grande que celle des hommes.
+
+Le croisement entre le genre et l'état de santé subjectif montre que les femmes affichent des proportions d'état de santé « Très bon » et « Bon » plus faibles que les hommes. À l'inverse, la part des femmes dans les catégories « Mauvais » et « Très mauvais » est légèrement plus élevée que celle des hommes, tandis que la catégorie « Moyen » y est nettement plus fréquente. Ces écarts vont dans le sens de notre hypothèse, suggérant qu'une santé perçue comme plus fragile chez les femmes pourrait participer à expliquer leur sentiment d'insécurité plus marqué.
+
+Cependant, sur le plan statistique, cette association entre le fait d'être une femme et d'avoir une santé moins bonne doit être interprétée avec une grande prudence. En effet, la p-value du test du Chi² s'élève à 0,09131, ce qui dépasse le seuil standard de 5 %. L'association observée n'est donc pas statistiquement significative et pourrait être due au hasard. \## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon le lieu de résidence du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_domicil <- prop.table(table(df_fr$domicil_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_domicil, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$domicil_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$domicil_clean, df_fr$aesfdrk_clean))
+```
+
+On observe que la proportion de personnes se déclarant « très insécurisées » la nuit dans leur quartier est nettement plus élevée en milieu urbain — qu'il s'agisse d'une grande ville (11,18 %), d'une ville moyenne ou petite (9,53 %) ou d'une banlieue (7,41 %) — que chez les ruraux vivant dans un village (4,60 %) ou dans une maison isolée à la campagne (3,88 %). À l'inverse, le sentiment de pleine sécurité (« très sécurisé ») culmine à 56,59 % à la campagne contre seulement 27,65 % dans les grandes villes. D'après la p-value du test du Chi², cette association est statistiquement hautement significative.
+
+\n
+
+Ce résultat indique que l'insécurité perçue est intimement liée aux milieux caractérisés par une forte densité démographique. Cela fragilise notre hypothèse précédente sur le manque d'infrastructures (souvent moins développées à la campagne), suggérant plutôt que le problème est inhérent à la ville elle-même. Sur le plan théorique, ce phénomène s'aligne parfaitement avec les thèses de l'École de Chicago, qui associent la densité urbaine à un affaiblissement des réseaux de sociabilité, à l'anonymat et à une perte de contrôle social informel. Une autre piste explicative pourrait résider dans une perception anxieuse de l'altérité ou de l'immigration, souvent plus visible en milieu urbain. Ce constat met également en lumière un paradoxe frappant : l'espace urbain, pourtant théoriquement mieux doté en forces de l'ordre (police, gendarmerie), est celui où les habitants ont le plus peur, tandis que les zones isolées affichent les taux d'anxiété les plus bas. Néanmoins, la valeur du V de Cramer ($0,124$) rappelle que l'intensité de cette relation reste modérée. Cette absence de déterminisme mécanique explique les exceptions observées : de nombreux citadins continuent de se sentir parfaitement sereins, tandis qu'une petite portion de ruraux exprime un sentiment d'insécurité.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon la région de résidence du répondant {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_work <- prop.table(table(df_fr$region, df_fr$aesfdrk_clean), 1) * 100
+round(tab_work, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$region, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$region, df_fr$aesfdrk_clean))
+```
+
+Certaines régions se distinguent par un niveau de sérénité particulièrement élevé chez leurs habitants. C'est le cas de la Basse-Normandie (FRD1), où 62,00 % des répondants se sentent « très sécurisés », contre seulement 2,00 % de « très insécurisés ». Bien qu'avec un écart notable par rapport au groupe de tête, d'autres régions affichent également des taux de forte sécurité proches de la moitié de leur échantillon, telles que la Bourgogne (FRI1, 49.12 %), Midi-Pyrénées (FRJ2, 48,91 %) ou encore la Franche-Comté (FRI3, 48,28 %).À l'inverse, d'autres territoires affichent un sentiment de sécurité beaucoup plus en retrait. La région Grand Est (FRF2) enregistre ainsi seulement 19,44 % de répondants « très sécurisés ». Le cas le plus surprenant concerne la région Centre-Val de Loire (FRI2) : seuls 12,00 % des habitants s'y déclarent « très sécurisés » et aucun (0,00 %) ne se dit « très insécurisé ». En revanche, la catégorie « insécurisé » y atteint un record national avec 36,00 %, ce qui représente une structure de réponses très singulière et atypique par rapport au reste du pays.D'après la p-value du test du Chi², l'association entre la région de résidence et le sentiment de sécurité est statistiquement hautement significative. Toutefois, la valeur du V de Cramer indique que l'intensité de cette relation reste faible.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'importance accordée à la richesse et au matériel {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_rich <- prop.table(table(df_fr$imprich_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_rich, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$imprich_clean , df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$imprich_clean , df_fr$aesfdrk_clean))
+```
+
+L'examen du tableau croisé révèle une dynamique particulière : le sentiment d'insécurité se concentre de manière disproportionnée chez les répondants pour qui la recherche de richesse et de biens matériels est la plus valorisée. En effet, parmi les personnes qui affirment que l'énoncé « être riche, avoir beaucoup d'argent et des objets coûteux » leur correspond tout à fait (« Me ressemble beaucoup »), la proportion de personnes se sentant « très insécurisées » atteint un niveau record de 16,00 %, soit le taux le plus élevé du tableau. En combinant les réponses « insécurisé » et « très insécurisé », ce groupe culmine à 40,00 % d'anxiété nocturne. On peut émettre l'hypothèse que cette forte insécurité perçue touche des individus issus de milieux populaires ou défavorisés qui aspirent fortement à une ascension matérielle, mais résident actuellement dans des quartiers moins sécurisés, faute de moyens financiers pour s'installer dans des zones plus favorisées.Toutefois, cette relation n'est pas uniforme et ne présente pas une dégradation progressive et linéaire à travers toutes les modalités. On observe un comportement irrégulier aux extrêmes : les personnes se disant « très insécurisées » représentent 9,73 % chez ceux qui rejettent totalement cette valeur (« Ne me ressemble pas du tout »), alors qu'elles ne sont que 5,08 % parmi la catégorie intermédiaire « Me ressemble ».D'après la p-value du test du Chi² ($p = 0,02598$), l'association est statistiquement significative au seuil de 5 %. Néanmoins, la valeur du V de Cramer ($0,069$) confirme que l'intensité de cette relation est très faible, ce qui traduit le caractère non linéaire de cette variable et la présence d'autres facteurs explicatifs prédominants.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'importance accordée à la sécurité de l'environnement {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_safe <- prop.table(table(df_fr$impsafe_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_safe, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$impsafe_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$impsafe_clean, df_fr$aesfdrk_clean))
+```
+
+L'analyse de ce tableau met en lumière une cohérence psychologique et comportementale tout à fait logique : les individus qui expriment un fort besoin de sécurité sont également ceux qui manifestent la plus grande peur dans l'espace public nocturne. Les pourcentages traduisent une dégradation progressive et linéaire très nette à travers les différentes modalités.Du côté de la sérénité, la proportion de répondants se sentant « très sécurisés » culmine chez ceux qui rejettent totalement l'importance de la sécurité, atteignant 58,82 % pour la modalité « Ne me ressemble pas du tout » et 50,49 % pour « Ne me ressemble pas ». À l'inverse, l'anxiété se concentre chez ceux qui accordent une importance primordiale à un environnement sûr : chez les répondants qui déclarent « Me ressemble beaucoup », le cumul des sentiments de peur (« insécurisé » et « très insécurisé ») atteint un sommet de 33,63 % (dont 14,97 % de « très insécurisés »).D'après la p-value du test du Chi², cette association est statistiquement hautement significative. Néanmoins, la valeur du V de Cramer indique que l'intensité de cette relation reste faible.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'importance accordée à la loyauté envers les proches {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_loy <- prop.table(table(df_fr$iplylfr_clean , df_fr$aesfdrk_clean), 1) * 100
+round(tab_loy, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$iplylfr_clean , df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$iplylfr_clean , df_fr$aesfdrk_clean))
+```
+
+Le sentiment d'insécurité progresse de manière visible chez les répondants qui nuancent ou rejettent cette valeur. La proportion de personnes « très insécurisées » atteint ainsi ses niveaux les plus élevés dans les catégories « Me ressemble tout juste un peu » (12,77 %) et « Ne me ressemble pas » (14,29 %). De plus, c'est la modalité « Me ressemble tout juste un peu » qui affiche le taux de forte sécurité le plus bas du tableau, avec seulement 26,60 % de « très sécurisés ».Ce constat met en lumière un phénomène captivant : les individus qui expriment des avis tranchés ou "radicaux", qu'ils soient très positifs (« Me ressemble beaucoup ») ou très négatifs (« Ne me ressemble pas du tout », où le cumul de sécurité atteint 84,61 %), affichent paradoxalement une plus grande assurance et un profil plus courageux dans l'espace public nocturne. Ce sont les répondants aux avis intermédiaires ou modérés qui manifestent le plus d'anxiété.D'après la p-value du test du Chi², cette association est statistiquement significative. Toutefois, la valeur du V de Cramer confirme que l'intensité de cette relation reste faible, ce qui traduit le caractère non linéaire et subtil de ce lien entre valeurs interpersonnelles et sentiment de sécurité.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon l'importance accordée à l'autonomie et à la liberté {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_free <- prop.table(table(df_fr$impfree_clean , df_fr$aesfdrk_clean), 1) * 100
+round(tab_free, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$impfree_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$impfree_clean, df_fr$aesfdrk_clean))
+```
+
+L'examen du tableau croisé montre une structure de réponses singulière et surprenante pour la modalité extrême « Ne me ressemble pas du tout » (le fait de rejeter complètement l'importance de prendre ses propres décisions et d'être libre). Cette catégorie de répondants se polarise en effet entre deux extrêmes : elle enregistre à la fois la plus forte proportion de personnes « Très sécurisées » (48,28 %) par rapport aux autres catégories, mais affiche également un taux d'insécurité notable (24,14 % d'« Insécurisés » et 13,79 % de « Très insécurisés »).
+
+D'après leur affirmation, ce résultat peut s'interpréter de deux manières :
+
+D'un côté, ces individus peuvent avoir des proches sur qui ils comptent et dont ils dépendent, ce qui leur procure un fort sentiment de protection et explique pourquoi ils se sentent « très sécurisés ».
+
+D'un autre côté, cela peut traduire un manque d'autonomie ou une dépendance subie, rendant ces personnes plus vulnérables et expliquant pourquoi elles se déclarent « insécurisées ».
+
+Néanmoins, sur le plan statistique, la p-value du test du Chi² s'élève à 0,07004, ce qui signifie que cette association n'est statistiquement pas significative.
+
+## Le sentiment de sécurité en marchant seul la nuit dans son quartier selon les limitations dans les activités quotidiennes par une maladie ou un handicap {style="color: blue;"}
+
+```{r}
+#| code-summary: Tableau croisé (pourcentages en ligne)
+tab_hand <- prop.table(table(df_fr$hlthhmp_clean, df_fr$aesfdrk_clean), 1) * 100
+round(tab_hand, 2)
+```
+
+```{r}
+#| code-summary: Test de significativité du chi²
+chisq.test(table(df_fr$hlthhmp_clean, df_fr$aesfdrk_clean))
+```
+
+```{r}
+#| code-summary: Intensité de la relation (V de Cramer)
+cramer.v(table(df_fr$hlthhmp_clean, df_fr$aesfdrk_clean))
+```
+
+L'examen du tableau croisé met en évidence une nette différence de ressenti selon l'existence de limitations physiques ou de santé. Les répondants qui déclarent être limités dans leurs activités quotidiennes — que ce soit « Oui beaucoup » ou « Oui, dans une certaine mesure » — sont surreprésentés dans les catégories « Insécurisé(e) » et « Très insécurisé(e) » par rapport aux personnes sans handicap ni maladie (« Non »). En effet, le taux de personnes se sentant « très insécurisées » atteint 13,69 % chez les personnes fortement limitées et 11,58 % chez celles qui le sont modérément, contre seulement 6,09 % pour les personnes sans limitation.Ce constat indique que les limitations de santé sont bien liées au sentiment de sécurité en marchant seul la nuit dans son quartier. Pour expliquer ce phénomène, deux hypothèses majeures peuvent être avancées : \n - D'une part, une explication liée à la vulnérabilité physique et environnementale : une partie du sentiment d'insécurité peut provenir de la difficulté à bien marcher ou à réagir face à l'environnement nocturne et à l'infrastructure urbaine à cause du handicap. \n - D'autre part, cela peut révéler l'effet de facteurs sous-jacents communs. Un facteur qui cause ou accompagne ce handicap peut également accentuer le sentiment d'insécurité, à l'instar de l'âge avancé ou le fait d'avoir déjà été victime d'un cambriolage ou d'une agression. \n D'après la p-value du test du Chi², cette association est statistiquement hautement significative et ne doit rien au hasard. Toutefois, la valeur du V de Cramer indique que l'intensité globale de cette relation reste faible.
+
+# Analyses mutltivariées {style="color: darkblue;"}
+
+Dans cette section, nous réalisons des analyses multivariées à l'aide de modèles de régression linéaire. Nous allons construire plusieurs modèles de manière progressive.
+
+```{r}
+#| code-summary: Transformer la variable de sentiment de sécurité en variable continue
+df_fr$aesfdrk_clean <- as.character(df_fr$aesfdrk_clean)
+
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == "Très sécurisé(e)"] <- "1"
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == "Sécurisé(e)"] <- "2"
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == "Insécurisé(e)"] <- "3"
+df_fr$aesfdrk_clean [df_fr$aesfdrk_clean == "Très insécurisé(e)"] <- "4"
+
+df_fr$aesfdrk_clean <- as.numeric(df_fr$aesfdrk_clean)
+```
+
+```{r}
+#| code-summary: Définition des modalités de référence pour la régression
+df_fr$gndr_clean <- relevel(df_fr$gndr_clean, ref = "Homme")
+df_fr$dscrgrp_clean <- relevel(df_fr$dscrgrp_clean, ref = "Non")
+df_fr$brncntr_clean <- relevel(df_fr$brncntr_clean, ref = "Oui")
+df_fr$eisced_clean <- relevel(df_fr$eisced_clean, ref = "Supérieur (Bac+3)")
+df_fr$crmvct_clean <- relevel(df_fr$crmvct_clean, ref = "Non")
+df_fr$health_clean <- relevel(df_fr$health_clean, ref = "Bon")
+df_fr$domicil_clean <- relevel(df_fr$domicil_clean, ref = "Une grande ville")
+df_fr$imprich_clean <- relevel(df_fr$imprich_clean, ref = "Ne me ressemble pas du tout")
+df_fr$impsafe_clean <- relevel(df_fr$impsafe_clean, ref = "Me ressemble beaucoup")
+df_fr$iplylfr_clean <- relevel(df_fr$iplylfr_clean, ref = "Me ressemble beaucoup")
+df_fr$impfree_clean <- relevel(df_fr$impfree_clean, ref = "Me ressemble beaucoup")
+df_fr$hlthhmp_clean <- relevel(df_fr$hlthhmp_clean, ref = "Non")
+```
+
+## Modèle 1 : Le sentiment de sécurité en fonction des variables socio-démographiques {style="color: blue;"}
+
+Les variables explicatives mobilisées sont :
+
+-   Genre (gndr_clean)
+
+-   Âge (agea)
+
+-   Naissance en France (brncntr_clean)
+
+-   Région (region)
+
+```{r}
+#| code-summary: Estimation du modèle 1 
+model1 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 1)
+nrow(model.frame(model1))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model1)
+```
+
+## Modèle 2 : Le sentiment de sécurité en fonction des variables socio-démographiques, du type de résidence et du niveau d'études {style="color: blue;"}
+
+Ce deuxième modèle intègre l'ensemble des variables du Modèle 1, auxquelles s'ajoutent :
+
+-   Type de résidence (domicil_clean)
+
+-   Niveau d'études (eisced_clean)
+
+```{r}
+#| code-summary: Estimation du modèle 2
+model2 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 2)
+nrow(model.frame(model2))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model2)
+```
+
+## Modèle 3 : Le sentiment de sécurité en fonction des variables socio-démographiques, du cadre de vie, du niveau d'études et de l'expérience de la discrimination {style="color: blue;"}
+
+Ce troisième modèle intègre l'ensemble des variables du Modèle 2, auxquelles s'ajoutent :
+
+-   Le sentiment d'appartenir à un groupe discriminé (dscrgrp_clean)
+
+```{r}
+#| code-summary: Estimation du modèle 3
+model3 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean + dscrgrp_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 3)
+nrow(model.frame(model3))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model3)
+```
+
+## Modèle 4 : Le sentiment de sécurité en fonction des variables socio-démographiques, du cadre de vie, du niveau d'études, de l'expérience de la discrimination et du bien-être subjectif {style="color: blue;"}
+
+Ce quatrième modèle intègre l'ensemble des variables du Modèle 3, auxquelles s'ajoute :
+
+-   Le niveau de bonheur subjectif (happy_clean)
+
+```{r}
+#| code-summary: Estimation du modèle 4
+model4 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean + dscrgrp_clean + happy_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 4)
+nrow(model.frame(model4))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model4)
+```
+
+## Modèle 5 : Le sentiment de sécurité en fonction des variables socio-démographiques, du cadre de vie, du niveau d'études, de l'expérience de la discrimination, du bien-être subjectif et et de l'expérience de la victimisation {style="color: blue;"}
+
+Ce cinquième modèle intègre l'ensemble des variables du Modèle 4, auxquelles s'ajoute :
+
+-   L'expérience de la victimisation au cours des 5 dernières années (crmvct_clean)
+
+```{r}
+#| code-summary: Estimation du modèle 5
+model5 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean + dscrgrp_clean + happy_clean +
+               crmvct_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 5)
+nrow(model.frame(model5))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model5)
+```
+
+## Modèle 6 : Le sentiment de sécurité en fonction des variables socio-démographiques, du cadre de vie, du niveau d'études, de l'expérience de la discrimination, du bien-être subjectif, de l'expérience de la victimisation et des avis prsonnels {style="color: blue;"}
+
+Ce sixième modèle intègre l'ensemble des variables du Modèle 5, auxquelles s'ajoute :
+
+-   Importance de la richesse et du matériel (imprich_clean)
+
+-   Importance de la sécurité de l'environnement (impsafe_clean)
+
+-   Importance de la loyauté envers les proches (iplylfr_clean)
+
+-   Importance de pouvoir prendre ses propres décisions et d'être libre (impfree_clean)
+
+```{r}
+#| code-summary: Estimation du modèle 6
+model6 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean + dscrgrp_clean + happy_clean +
+               crmvct_clean + imprich_clean + impsafe_clean + iplylfr_clean +     
+               impfree_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 6)
+nrow(model.frame(model6))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model6)
+```
+
+## Modèle 6 : Le sentiment de sécurité en fonction des variables socio-démographiques, du cadre de vie, du niveau d'études, de l'expérience de la discrimination, du bien-être subjectif, de l'expérience de la victimisation et des avis prsonnels {style="color: blue;"}
+
+Ce septième et dernier modèle parachève l'analyse en intégrant l'ensemble des variables du Modèle 6, auxquelles s'ajoute le bloc lié à la santé et aux capacités physiques :
+
+-   État de santé général subjectif (health_clean)
+
+-   Être limité dans ses activités quotidiennes par une maladie ou un handicap (hlthhmp_clean)
+
+```{r}
+#| code-summary: Estimation du modèle7
+model7 <- lm(aesfdrk_clean ~ gndr_clean + agea + brncntr_clean + region + 
+               domicil_clean + eisced_clean + dscrgrp_clean + happy_clean +
+               crmvct_clean + imprich_clean + impsafe_clean + iplylfr_clean +     
+               impfree_clean + health_clean + hlthhmp_clean, data = df_fr)
+```
+
+```{r}
+#| code-summary: Nombre d'observations (effectif de l'échantillon du modèle 7)
+nrow(model.frame(model7))
+```
+
+```{r}
+#| code-summary: Génération des coefficients et de leurs p-values
+summary(model7)
+```
+
+```{r}
+#| code-summary: Tableau comparatif des 7 modèles
+library(modelsummary)
+
+# Crée une liste de tes modèles
+liste_modeles <- list(
+  "Modèle 1" = model1,
+  "Modèle 2" = model2,
+  "Modèle 3" = model3,
+  "Modèle 4" = model4,
+  "Modèle 5" = model5,
+  "Modèle 6" = model6,
+  "Modèle 7" = model7
+)
+
+# Génère un tableau propre
+modelsummary(liste_modeles, stars = TRUE, statistic = "p.value")
+```
